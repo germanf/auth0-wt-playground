@@ -1,7 +1,7 @@
 "use latest";
 
 /**
- * webtask to get notified when bitcoin price fall 10%
+ * @TODO: webtask to get notified when bitcoin price fall 10%
  *
  * @mongoApi:
  *    wt create task.js
