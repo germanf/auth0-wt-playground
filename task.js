@@ -3,7 +3,20 @@
 /**
  * webtask to get notified when bitcoin price fall 10%
  *
- * @run: wt create --secret MONGO_URL=mongodb://https://api.mlab.com/api/1/databases?apiKey={token} task.js
+ * @mongoApi: wt create --secret MONGO_URL=https://api.mlab.com/api/1/databases?apiKey={token} task.js
+ *
+ * @run:
+ *    wt create https://raw.githubusercontent.com/auth0/wt-cli/master/sample-webtasks/mongodb.js
+ *      --name mongo
+ *      --secret MONGO_URL=mongodb://webtask:supersecret@ds047592.mongolab.com:47592/webtask-examples
+ *
+ * @cron:
+ *    wt cron schedule
+ *        -n mongocron
+ *        -s MONGO_URL=mongodb://webtask:supersecret@ds047592.mongolab.com:47592/webtask-examples
+ *        10m
+ *        https://raw.githubusercontent.com/auth0/wt-cli/master/sample-webtasks/mongodb.js
+ *
  */
 
 var parallel    = require('async').parallel;
