@@ -1,9 +1,12 @@
-'use strict';
+"use latest";
 
 /**
  * webtask to get notified when bitcoin price fall 10%
  *
- * @mongoApi: wt create --secret MONGO_URL=https://api.mlab.com/api/1/databases?apiKey={token} task.js
+ * @mongoApi:
+ *    wt create task.js
+ *      -n mongo
+ *      -s MONGO_URL=mongodb://auth0-wt:<secret>@ds042379.mlab.com:42379/auth0-webtask
  *
  * @run:
  *    wt create https://raw.githubusercontent.com/auth0/wt-cli/master/sample-webtasks/mongodb.js
@@ -18,37 +21,125 @@
  *        https://raw.githubusercontent.com/auth0/wt-cli/master/sample-webtasks/mongodb.js
  *
  */
+var {MongoClient} = require('mongodb');
+var {parallel} = require('async');
+var {waterfall} = require('async');
 
-var parallel    = require('async').parallel;
-var MongoClient = require('mongodb').MongoClient;
+/**
+ * @param {secret} MONGO_URL - Mongo database url
+ */
+module.exports = (ctx, done) => {
+  let {MONGO_URL} = ctx.data;
 
-module.exports = function (ctx, done) {
-  var words = ctx.data.title
-    .split(' ')
-    .concat(
-      ctx.data.excerpt.split(' ')
-    );
+  if (!MONGO_URL) {
+    return done(new Error('MONGO_URL secret is missing'));
+  }
 
-  MongoClient.connect(ctx.data.MONGO_URL, function (err, db) {
-    if(err) return done(err);
+  waterfall([
+    connectDB,
+    extractWords,
+    // the next two calls are only for playing, you can do a single insert
+    createJobs,
+    execJobs
+  ], done);
 
-    var job_list = words.map(function (word) {
+//  INTERNALS
 
-      return function (cb) {
-        save_word(word, db, function (err) {
-          if(err) return cb(err);
+  /**
+   * Connect DDBB
+   * @param done
+   */
+  function connectDB(done) {
+    console.log("executing connectDB..");
+    MongoClient.connect(MONGO_URL, (err, db) => {
+      done(null, {db: db});
 
-          cb(null);
-        });
-      };
-
+      if (err) {
+        return done(err);
+      }
     });
+  }
 
-    parallel(job_list, function (err) {
-      if(err) return done(err);
+  /**
+   * Extract Words
+   * @param opts
+   * @param done
+   */
+  function extractWords(opts, done) {
+    console.log("executing extractWords..");
+    console.log(ctx.data);
+
+    try {
+      opts.words = ctx.data.title
+        .split(' ')
+        .concat(
+          ctx.data.excerpt.split(' ')
+        );
+    } catch (ex) {
+      done(new Error('invalid format, expected title & excerpt in query string'));
+    } finally {
+      done(null, opts);
+    }
+  }
+
+  /**
+   * create Job
+   * @param opts
+   * @param done
+   */
+  function createJobs(opts, done) {
+    console.log("executing createJobs..");
+
+    opts.jobs = (
+      opts.words && opts.words.length > 0 ?
+        opts.words.map((word) => {
+          return (cb) => {
+            let parms = {word: word, db: opts.db};
+
+            saveWord(parms, (err) => {
+              if (err) {
+                return cb(err);
+              }
+
+              cb(null);
+            });
+          };
+        })
+        : []);
+
+    done(null, opts);
+  }
+
+  /**
+   * save the given word
+   * @param opts
+   * @param done
+   */
+  function saveWord(params, done) {
+    params.db
+      .collection('words')
+      .insertOne({word: params.word}, (err, result) => {
+        if (err) {
+          return done(err);
+        }
+
+        done(null, result);
+      });
+  }
+
+  /**
+   * exec the given jobs in parallel
+   * @param opts
+   * @param done
+   */
+  function execJobs(opts, done) {
+    console.log("executing execJobs..");
+    parallel(opts.jobs, (err) => {
+      if (err) {
+        return done(err);
+      }
 
       done(null, 'Success.');
     });
-
-  });
+  }
 };
